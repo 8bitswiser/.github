@@ -1,12 +1,11 @@
-## Hi there 👋
+<img src="https://8bitswiser.com/8-bits-wiser.svg" alt="8 Bits Wiser logo" width="200"/>
 
-<!--
 
-**Here are some ideas to get you started:**
+Technology Consulting // AI/ML & Data Analytics // Website Development & SEO
 
-🙋‍♀️ A short introduction - what is your organization all about?
-🌈 Contribution guidelines - how can the community get involved?
-👩‍💻 Useful resources - where can the community find your docs? Is there anything else the community should know?
-🍿 Fun facts - what does your team eat for breakfast?
-🧙 Remember, you can do mighty things with the power of [Markdown](https://docs.github.com/github/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax)
--->
+
+🌎 [8bitswiser.com](https://8bitswiser.com/)
+
+✉️ [Get in contact](contact@8bitswiser.com)
+
+
