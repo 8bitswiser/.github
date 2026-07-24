@@ -1,0 +1,133 @@
+name: Deploy Worker
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Repository-relative Worker directory
+        required: true
+        type: string
+      artifact-name:
+        description: Validated build artifact name
+        required: true
+        type: string
+      artifact-path:
+        description: Repository-relative artifact extraction directory
+        required: true
+        type: string
+      node-version-file:
+        description: Repository-relative Node version file
+        required: false
+        type: string
+        default: .node-version
+      environment:
+        description: GitHub deployment environment
+        required: false
+        type: string
+        default: production
+      verify-bundle-command:
+        description: Downloaded bundle verification command
+        required: false
+        type: string
+        default: npm run verify-bundle
+      migration-command:
+        description: Optional pre-deployment migration command
+        required: false
+        type: string
+        default: ""
+      wrangler-args:
+        description: Shared Wrangler config, environment, and name selectors
+        required: false
+        type: string
+        default: ""
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+    outputs:
+      version-id:
+        description: Deployed Worker version ID
+        value: ${{ jobs.deploy.outputs.version-id }}
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    outputs:
+      version-id: ${{ steps.deploy.outputs.version_id }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: .
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+
+      - name: Download validated build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ inputs.artifact-path }}
+
+      - name: Verify downloaded deployment bundle
+        run: ${{ inputs.verify-bundle-command }}
+
+      - name: Apply migrations
+        if: inputs.migration-command != ''
+        run: ${{ inputs.migration-command }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy Worker
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          npx wrangler deploy --strict ${{ inputs.wrangler-args }} 2>&1 | tee deploy.log
+
+          version_id="$(sed -nE 's/.*Current Version ID: ([0-9a-f-]{36}).*/\1/p' deploy.log | tail -n 1)"
+          if [[ ! "$version_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            echo "Unable to read the deployed Worker version ID" >&2
+            exit 1
+          fi
+          echo "version_id=$version_id" >> "$GITHUB_OUTPUT"
+
+      - name: Verify deployed version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler deployments list --json ${{ inputs.wrangler-args }} > deployment.json
+          npx platform-verify-deployment \
+            deployment.json \
+            "${{ steps.deploy.outputs.version_id }}"
+
+      - name: Upload deployment metadata
+        if: always() && steps.deploy.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deployment-${{ inputs.artifact-name }}-${{ github.sha }}
+          path: ${{ inputs.working-directory }}/deployment.json
+          if-no-files-found: error
+          retention-days: 90
