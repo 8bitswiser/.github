@@ -14,8 +14,9 @@ The organization repository also owns two small workflow primitives:
   dependencies, runs the caller's validation and optional browser smoke
   commands, and can upload a validated build.
 - `deploy-worker.yml` downloads and verifies that build, optionally applies
-  migrations, deploys with Wrangler, and proves the exact deployed version is
-  receiving 100% of traffic.
+  migrations, deploys with Wrangler, proves the exact deployed version is
+  receiving 100% of traffic, and can purge the caller's zone without creating
+  a second production-environment boundary.
 
 Callers keep their own change detection, environment boundaries, cache purges,
 multi-Worker ordering, and other repository-specific orchestration.
